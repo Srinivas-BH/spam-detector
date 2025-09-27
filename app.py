@@ -1,95 +1,102 @@
 from flask import Flask, request, jsonify, send_from_directory
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.linear_model import LinearRegression #linear regression is a machine learning algorithm that is used to predict a continuous value.
+from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
-from sklearn.model_selection import train_test_split
-import numpy as np
+# train_test_split is no longer needed as we train on the full dataset for production
+import pandas as pd
 import os
 
-
 def build_and_train_model() -> Pipeline:
-    # Minimal sample dataset (you can replace with a larger real dataset)
-    messages = [
-        "Free entry in 2 a wkly comp to win FA Cup final tkts",
-        "URGENT! You have won a 1 week FREE membership",
-        "Congratulations! You've been selected for a cash prize",
-        "Claim your free ringtone now",
-        "Dear user, exclusive offer just for you",
-        "Win a brand new iPhone now",
-        "Call this number now to receive your prize",
-        "Lowest price meds, buy now",
-        "Limited time deal, click the link",
-        "You have been chosen to receive a reward",
-        "Hey, are we still on for lunch today?",
-        "I'll be there in 10 minutes",
-        "Can you send me the report by EOD?",
-        "Let's catch up this weekend",
-        "Meeting moved to 3pm, see you then",
-        "Don't forget to bring the documents",
-        "Thanks for your help yesterday",
-        "Happy birthday! Have a great day",
-        "See you at the gym later",
-        "What time works best for the call?",
-    ]
-    # 1 for spam, 0 for ham
-    labels = [
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    ]
+    """
+    Loads the full Kaggle SMS dataset, cleans it, and trains the final model 
+    on all available data for maximum accuracy.
+    """
+    try:
+        # Step 1: Load the standard Kaggle dataset ('spam_data.csv')
+        # We use latin-1 encoding and specify to only use the first two columns to ensure clean parsing.
+        df = pd.read_csv('spam_data.csv', encoding='latin-1', usecols=[0, 1])
+        df.columns = ['label', 'message']
+        
+        # Step 2: Clean the data thoroughly
+        # Drop any rows with missing values (NaNs).
+        df.dropna(inplace=True)
+        # Filter the dataset to only include rows with 'spam' or 'ham' labels. This is a critical
+        # step to prevent errors and ensure the model only learns from valid data.
+        df = df[df['label'].isin(['spam', 'ham'])]
+        
+        # Prepare the data for the model
+        messages = df['message'].astype(str).tolist()
+        labels = df['label'].map({'spam': 1, 'ham': 0}).tolist()
+        print(f"Successfully loaded and processed {len(messages)} messages from the Kaggle dataset.")
 
-    # Build a simple pipeline: TF-IDF -> Linear Regression
+    except FileNotFoundError:
+        print("FATAL: Dataset file 'spam_data.csv' not found. Please ensure it is in the correct directory.")
+        exit()
+    except Exception as e:
+        print(f"An error occurred while loading or processing the data: {e}")
+        exit()
+
+    # Step 3: Build the machine learning pipeline.
+    # This pipeline defines the steps to process the text and make a prediction.
     pipeline: Pipeline = Pipeline([
-        ("tfidf", TfidfVectorizer(lowercase=True, stop_words="english")),
-        ("linreg", LinearRegression()),
+        # TfidfVectorizer: Converts text messages into meaningful numerical vectors.
+        # We also tell it to ignore common English stop words.
+        ("tfidf", TfidfVectorizer(lowercase=True, stop_words="english", max_features=5000, ngram_range=(1,2))),
+        
+        # LogisticRegression: A powerful and reliable classification algorithm for this task.
+        ("classifier", LogisticRegression(random_state=42, solver='liblinear')),
     ])
 
-    # Fit on all data to keep it simple for demo purposes
-    pipeline.fit(messages, np.array(labels, dtype=float))
+    # Step 4: Train the final model on the ENTIRE dataset.
+    # By using all 5,500+ messages for training, we ensure the model has learned
+    # from every possible example, maximizing its predictive accuracy.
+    print(f"Training the final model on all {len(messages)} messages for maximum accuracy...")
+    pipeline.fit(messages, labels)
+    print("Model training complete.")
+    
     return pipeline
 
-
+# Initialize the Flask web application and train the model on startup
 app = Flask(__name__, static_folder=None)
 model: Pipeline = build_and_train_model()
 
-
 @app.route("/")
 def index():
-    # Serve the existing spam.html
+    """Serves the main HTML user interface."""
     directory = os.path.dirname(os.path.abspath(__file__))
     return send_from_directory(directory, "spam.html")
 
-
 @app.route("/predict", methods=["POST"])
 def predict():
+    """Receives a user's message and returns the exact prediction percentages."""
     try:
         data = request.get_json(silent=True) or {}
         message = (data.get("message") or "").strip()
         if not message:
-            return jsonify({
-                "ok": False,
-                "error": "Message is required",
-            }), 400
+            return jsonify({"ok": False, "error": "Message is required"}), 400
 
-        # Linear regression outputs a continuous score; threshold at 0.5
-        score = float(model.predict([message])[0])
-        # Clamp score to [0,1] to avoid out-of-range values
-        score_clamped = max(0.0, min(1.0, score))
-        label = "spam" if score_clamped >= 0.5 else "ham"
+        # Use the fully trained model to predict probabilities for [ham, spam]
+        probabilities = model.predict_proba([message])[0]
+        ham_probability = float(probabilities[0])
+        spam_probability = float(probabilities[1])
 
+        # Determine the final label based on the higher probability
+        label = "spam" if spam_probability > ham_probability else "ham"
+
+        # Return a JSON response with the exact percentages
         return jsonify({
             "ok": True,
             "label": label,
-            "score": score_clamped,
+            "spam_score": spam_probability,
+            "ham_score": ham_probability,
         })
     except Exception as exc:
         return jsonify({
             "ok": False,
-            "error": str(exc),
+            "error": f"An unexpected error occurred: {str(exc)}",
         }), 500
 
-
 if __name__ == "__main__":
-    # Run the development server
-    app.run(host="127.0.0.1", port=5000, debug=True)
-
+    print("Starting Flask server at http://127.0.0.1:5000")
+    app.run(host="127.0.0.1", port=5000)
 
