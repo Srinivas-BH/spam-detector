@@ -5,100 +5,284 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Spam Detector</title>
     <style>
-        :root { --bg:#0f172a; --panel:#111827; --muted:#94a3b8; --text:#e5e7eb; --brand:#22c55e; --danger:#ef4444; }
+        /* Using Google Fonts for a modern look */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+
+        :root { 
+            --bg: #0f172a; 
+            --panel: #1e293b;
+            --muted: #94a3b8; 
+            --text: #e2e8f0;
+            --brand: #22c55e;
+            --danger: #ef4444; 
+            --ham-color: #4ade80; 
+            --spam-color: #f87171;
+            --border-color: rgba(148, 163, 184, 0.2);
+        }
         * { box-sizing: border-box; }
-        body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; background: radial-gradient(1200px 600px at 20% 0%, #1f2937 0%, #0b1022 60%), var(--bg); color: var(--text); min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
-        .card { width:100%; max-width:720px; background:linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02)); border:1px solid rgba(148,163,184,0.15); border-radius:16px; backdrop-filter: blur(10px); box-shadow: 0 20px 50px rgba(0,0,0,0.3); overflow:hidden; }
-        .header { padding:24px 28px; border-bottom:1px solid rgba(148,163,184,0.15); display:flex; align-items:center; gap:12px; }
-        .logo { width:36px; height:36px; border-radius:8px; display:grid; place-items:center; background: linear-gradient(135deg, var(--brand), #16a34a); font-weight:700; color:#052e16; }
-        .title { font-size:20px; font-weight:700; letter-spacing:0.2px; }
-        .muted { color: var(--muted); font-size:13px; }
-        .body { padding:28px; display:grid; gap:18px; }
-        label { font-weight:600; font-size:14px; color:#cbd5e1; }
-        textarea { width:100%; min-height:140px; background:#0b1223; color:var(--text); border:1px solid rgba(148,163,184,0.18); border-radius:12px; padding:14px 16px; resize:vertical; outline:none; transition: border .2s, box-shadow .2s; }
-        textarea:focus { border-color:#60a5fa; box-shadow: 0 0 0 3px rgba(59,130,246,0.2); }
-        .actions { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
-        button { appearance:none; border:0; border-radius:10px; padding:12px 16px; font-weight:700; cursor:pointer; transition: transform .04s ease, background .2s ease, box-shadow .2s ease; }
-        .primary { background: linear-gradient(135deg, #60a5fa, #2563eb); color:white; box-shadow: 0 8px 20px rgba(37,99,235,0.35); }
+        html { font-size: 100%; } /* Base font size */
+        body { 
+            margin: 0; 
+            font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; 
+            background: var(--bg);
+            color: var(--text); 
+            min-height: 100vh; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            padding: 1rem; /* Use relative units for better scaling */
+        }
+        .card { 
+            width: 100%; 
+            max-width: 700px; 
+            background: var(--panel); 
+            border: 1px solid var(--border-color); 
+            border-radius: 1rem; 
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); 
+            overflow: hidden; 
+            display: flex;
+            flex-direction: column;
+        }
+        .header { 
+            padding: 1.5rem; 
+            border-bottom: 1px solid var(--border-color); 
+            display: flex; 
+            align-items: center; 
+            gap: 1rem; 
+        }
+        .logo { 
+            width: 40px; 
+            height: 40px; 
+            border-radius: 0.5rem; 
+            display: grid; 
+            place-items: center; 
+            background: linear-gradient(135deg, var(--brand), #16a3a); 
+            font-weight: 700; 
+            color: #052e16; 
+            flex-shrink: 0;
+        }
+        .title { font-size: 1.25rem; font-weight: 700; }
+        .muted { color: var(--muted); font-size: 0.875rem; }
+        .body { padding: 1.5rem; display: grid; gap: 1.25rem; }
+        label { font-weight: 600; font-size: 0.875rem; color: #cbd5e1; }
+        textarea { 
+            width: 100%; 
+            min-height: 150px; 
+            background: #0f172a;
+            color: var(--text); 
+            border: 1px solid var(--border-color); 
+            border-radius: 0.75rem; 
+            padding: 0.875rem 1rem; 
+            resize: vertical; 
+            outline: none; 
+            transition: border-color 0.2s, box-shadow 0.2s; 
+            font-size: 1rem;
+        }
+        textarea:focus { 
+            border-color: #60a5fa; 
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25); 
+        }
+        .actions { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; }
+        button { 
+            appearance: none; 
+            border: 0; 
+            border-radius: 0.625rem; 
+            padding: 0.75rem 1.25rem; 
+            font-weight: 700; 
+            cursor: pointer; 
+            font-size: 0.9375rem;
+            transition: transform 0.1s ease, background 0.2s ease, box-shadow 0.2s ease; 
+        }
+        .primary { 
+            background: linear-gradient(135deg, #60a5fa, #2563eb); 
+            color: white; 
+            box-shadow: 0 4px 15px -2px rgba(37, 99, 235, 0.4); 
+        }
+        .primary:hover { box-shadow: 0 6px 20px -3px rgba(37, 99, 235, 0.5); }
         .primary:active { transform: translateY(1px); }
-        .ghost { background:transparent; color:#cbd5e1; border:1px solid rgba(148,163,184,0.2); }
-        .result { padding:18px; border-radius:12px; border:1px dashed rgba(148,163,184,0.25); display:none; }
-        .badge { display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border-radius:999px; font-weight:800; letter-spacing:0.3px; }
-        .spam { background: rgba(239,68,68,0.18); color:#fecaca; border:1px solid rgba(239,68,68,0.4); }
-        .ham { background: rgba(34,197,94,0.18); color:#bbf7d0; border:1px solid rgba(34,197,94,0.4); }
-        .score { font-variant-numeric: tabular-nums; font-weight:700; }
-        .footer { padding:20px 28px; border-top:1px solid rgba(148,163,184,0.15); display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#9aa4b2; }
-        .hint { font-size:12px; color:#9aa4b2; }
-        @media (max-width: 520px) { .header, .body, .footer { padding:16px; } .title { font-size:18px; } }
+        .ghost { 
+            background: transparent; 
+            color: #cbd5e1; 
+            border: 1px solid var(--border-color); 
+        }
+        .ghost:hover { background-color: rgba(148, 163, 184, 0.1); }
+        .hint { font-size: 0.875rem; color: var(--muted); padding: 0.5rem 0; }
+
+        /* Result Styles */
+        .result { 
+            padding: 1.25rem; 
+            border-radius: 0.75rem; 
+            border: 1px dashed var(--border-color); 
+            display: none; 
+        }
+        .score-container { 
+            display: flex; 
+            justify-content: space-around; 
+            gap: 1.25rem; 
+            width: 100%; 
+            margin-bottom: 1rem; 
+            text-align: center; 
+        }
+        .score-item { display: flex; flex-direction: column; align-items: center; }
+        .score-value { 
+            font-size: clamp(2rem, 8vw, 2.5rem); /* Responsive font size */
+            font-weight: 800; 
+            font-variant-numeric: tabular-nums; 
+            margin-bottom: 0.25rem; 
+        }
+        .score-value.ham { color: var(--ham-color); }
+        .score-value.spam { color: var(--spam-color); }
+        .score-label { font-size: 1rem; color: var(--muted); font-weight: 600; }
+        .result-summary { 
+            font-size: 0.875rem; 
+            text-align: center; 
+            color: #cbd5e1; 
+            border-top: 1px solid var(--border-color); 
+            padding-top: 1rem; 
+            margin-top: 0.5rem;
+        }
+        .badge { 
+            display: inline-flex; 
+            align-items: center; 
+            gap: 0.5rem; 
+            padding: 0.375rem 0.75rem; 
+            border-radius: 999px; 
+            font-weight: 800; 
+            letter-spacing: 0.3px; 
+            font-size: 0.8125rem; 
+        }
+        .spam-badge { background: rgba(239,68,68,0.18); color: #fecaca; border: 1px solid rgba(239,68,68,0.4); }
+        .ham-badge { background: rgba(34,197,94,0.18); color: #bbf7d0; border: 1px solid rgba(34,197,94,0.4); }
+
+        .footer { 
+            padding: 1.25rem 1.5rem; 
+            border-top: 1px solid var(--border-color); 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            font-size: 0.8125rem; 
+            color: var(--muted); 
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        /* --- RESPONSIVE DESIGN IMPROVEMENTS --- */
+        /* For smaller screens (e.g., mobile phones) */
+        @media (max-width: 640px) {
+            body { padding: 0.5rem; }
+            .card { border-radius: 0.75rem; }
+            .header, .body, .footer { padding: 1rem; }
+            .title { font-size: 1.125rem; }
+            .actions { flex-direction: column; align-items: stretch; }
+            button { width: 100%; }
+            .score-container { flex-direction: column; gap: 1rem; }
+            .footer { flex-direction: column; text-align: center; }
+        }
     </style>
     <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const predictBtn = document.getElementById('btn');
+            const exampleSpamBtn = document.getElementById('example-spam');
+            const exampleHamBtn = document.getElementById('example-ham');
+
+            predictBtn.addEventListener('click', predict);
+            exampleSpamBtn.addEventListener('click', () => fillExample('URGENT! You have won a FREE prize, click now'));
+            exampleHamBtn.addEventListener('click', () => fillExample('Hey, are we still on for lunch today?'));
+        });
+
         async function predict() {
             const input = document.getElementById('message');
-            const result = document.getElementById('result');
-            const badge = document.getElementById('badge');
-            const score = document.getElementById('score');
+            const resultEl = document.getElementById('result');
+            const badgeEl = document.getElementById('badge');
+            const hamScoreEl = document.getElementById('ham-score');
+            const spamScoreEl = document.getElementById('spam-score');
             const btn = document.getElementById('btn');
-            const error = document.getElementById('error');
-            error.textContent = '';
-            result.style.display = 'none';
+            const errorEl = document.getElementById('error');
+            
+            errorEl.textContent = '';
+            resultEl.style.display = 'none';
 
             const message = (input.value || '').trim();
-            if (!message) { error.textContent = 'Please enter a message.'; return; }
+            if (!message) { 
+                errorEl.textContent = 'Please enter a message.'; 
+                return; 
+            }
 
-            btn.disabled = true; btn.textContent = 'Predicting…';
+            btn.disabled = true; 
+            btn.textContent = 'Analyzing…';
+
             try {
                 const res = await fetch('/predict', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ message })
                 });
+
+                if (!res.ok) throw new Error(`Network error: ${res.statusText}`);
+
                 const data = await res.json();
+
                 if (!data.ok) throw new Error(data.error || 'Prediction failed');
+                
                 const isSpam = data.label === 'spam';
-                badge.textContent = isSpam ? 'SPAM' : 'HAM';
-                badge.className = 'badge ' + (isSpam ? 'spam' : 'ham');
-                score.textContent = (data.score * 100).toFixed(1) + '%';
-                result.style.display = 'block';
+                badgeEl.textContent = isSpam ? 'SPAM' : 'HAM';
+                badgeEl.className = 'badge ' + (isSpam ? 'spam-badge' : 'ham-badge');
+                
+                hamScoreEl.textContent = (data.ham_score * 100).toFixed(1) + '%';
+                spamScoreEl.textContent = (data.spam_score * 100).toFixed(1) + '%';
+                
+                resultEl.style.display = 'block';
+
             } catch (e) {
-                error.textContent = e.message;
+                errorEl.textContent = e.message;
             } finally {
-                btn.disabled = false; btn.textContent = 'Check Message';
+                btn.disabled = false; 
+                btn.textContent = 'Check Message';
             }
         }
+
         function fillExample(text) {
             document.getElementById('message').value = text;
         }
     </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="card">
         <div class="header">
             <div class="logo">AI</div>
             <div>
-                <div class="title">Spam Detector</div>
-                <div class="muted">Enter a message to predict spam vs ham</div>
+                <div class="title">Spam Content Analyzer</div>
+                <div class="muted">See the probability of a message being spam or ham</div>
             </div>
         </div>
         <div class="body">
             <label for="message">Message</label>
             <textarea id="message" placeholder="Type or paste a message to analyze…"></textarea>
             <div class="actions">
-                <button id="btn" class="primary" onclick="predict()">Check Message</button>
-                <button class="ghost" onclick="fillExample('URGENT! You have won a FREE prize, click now')">Example spam</button>
-                <button class="ghost" onclick="fillExample('Hey, are we still on for lunch today?')">Example ham</button>
-                <span id="error" class="hint"></span>
+                <button id="btn" class="primary">Check Message</button>
+                <button id="example-spam" class="ghost">Example (Spam)</button>
+                <button id="example-ham" class="ghost">Example (Ham)</button>
             </div>
+            <div id="error" class="hint"></div>
             <div id="result" class="result">
-                <span id="badge" class="badge ham">HAM</span>
-                <span class="muted">Confidence:</span> <span id="score" class="score">—</span>
+                <div class="score-container">
+                    <div class="score-item">
+                        <div class="score-value ham" id="ham-score">—%</div>
+                        <div class="score-label">Ham Probability</div>
+                    </div>
+                    <div class="score-item">
+                        <div class="score-value spam" id="spam-score">—%</div>
+                        <div class="score-label">Spam Probability</div>
+                    </div>
+                </div>
+                <div class="result-summary">
+                    Primary Classification: <span id="badge" class="badge ham-badge">HAM</span>
+                </div>
             </div>
         </div>
         <div class="footer">
-            <span>Model: TF‑IDF + Linear Regression</span>
-            <span class="muted">Demo only — not for production use</span>
+            <span>Model: TF‑IDF + Logistic Regression</span>
+            <span>UI Version: 2.0 Responsive</span>
         </div>
     </div>
 </body>
