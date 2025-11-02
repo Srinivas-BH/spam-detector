@@ -26,10 +26,8 @@ Thumbs.db
 *.pkl
 
 # Large dataset files (exclude large ones, keep small examples)
-ham_spam_emails.csv
-master_spam_dataset.csv
-email_phishing_data.csv
-new_spam_data.csv
+*.csv
+!requirements.txt
 
 # Temporary files
 *.tmp
