@@ -1,4 +1,7 @@
-Flask
+flask
 pandas
 scikit-learn
+joblib
+nltk
 numpy
+scipy

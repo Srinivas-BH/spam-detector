@@ -22,5 +22,21 @@ env/
 Thumbs.db
 .DS_Store
 
+# Model files (too large for git)
+*.pkl
+
+# Large dataset files (exclude large ones, keep small examples)
+ham_spam_emails.csv
+master_spam_dataset.csv
+email_phishing_data.csv
+new_spam_data.csv
+
+# Temporary files
+*.tmp
+*.log
+
+# Environment variables
+.env
+
 
 

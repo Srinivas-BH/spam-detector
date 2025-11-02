@@ -1,235 +1,288 @@
-from flask import Flask, request, jsonify, send_from_directory
-from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
-from sklearn.linear_model import LogisticRegression
-from sklearn.naive_bayes import MultinomialNB
-from sklearn.ensemble import RandomForestClassifier, VotingClassifier
-from sklearn.svm import SVC
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import cross_val_score
 import pandas as pd
-import os
-import numpy as np
 import re
-import string
+import nltk
+from nltk.corpus import stopwords
+from nltk.stem import PorterStemmer
+from nltk.tokenize import word_tokenize
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, VotingClassifier
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.linear_model import LogisticRegression
+from scipy.sparse import hstack
+import numpy as np
+import joblib
+import os
+from flask import Flask, request, render_template, jsonify
 
-def advanced_text_preprocessing(text):
-    """
-    Advanced text preprocessing for better spam detection accuracy.
-    """
-    if not isinstance(text, str):
-        return ""
-    
-    # Convert to lowercase
-    text = text.lower()
-    
-    # Remove URLs
-    text = re.sub(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', 'URL', text)
-    
-    # Remove email addresses
-    text = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', 'EMAIL', text)
-    
-    # Remove phone numbers
-    text = re.sub(r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b', 'PHONE', text)
-    
-    # Remove special characters but keep spaces
-    text = re.sub(r'[^a-zA-Z0-9\s]', ' ', text)
-    
-    # Remove extra whitespace
-    text = re.sub(r'\s+', ' ', text).strip()
-    
-    return text
+# --- NLTK Setup ---
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    nltk.download('punkt', quiet=True)
+    nltk.download('stopwords', quiet=True)
 
-def load_and_prepare_data():
-    """
-    Loads the full Kaggle SMS dataset, cleans it, and returns the processed data.
-    """
-    try:
-        # Step 1: Load the standard Kaggle dataset ('spam_data.csv')
-        # We use latin-1 encoding and specify to only use the first two columns to ensure clean parsing.
-        df = pd.read_csv('spam_data.csv', encoding='latin-1', usecols=[0, 1])
-        df.columns = ['label', 'message']
-        
-        # Step 2: Clean the data thoroughly
-        # Drop any rows with missing values (NaNs).
-        df.dropna(inplace=True)
-        # Filter the dataset to only include rows with 'spam' or 'ham' labels. This is a critical
-        # step to prevent errors and ensure the model only learns from valid data.
-        df = df[df['label'].isin(['spam', 'ham'])]
-        
-        # Prepare the data for the model with advanced preprocessing
-        messages = [advanced_text_preprocessing(str(msg)) for msg in df['message']]
-        labels = df['label'].map({'spam': 1, 'ham': 0}).tolist()
-        print(f"Successfully loaded and processed {len(messages)} messages from the Kaggle dataset.")
-        return messages, labels
+ps = PorterStemmer()
+stop_words = set(stopwords.words('english'))
 
-    except FileNotFoundError:
-        print("FATAL: Dataset file 'spam_data.csv' not found. Please ensure it is in the correct directory.")
-        exit()
-    except Exception as e:
-        print(f"An error occurred while loading or processing the data: {e}")
-        exit()
+# --- Global Model Variables ---
+ensemble_model = None
+vectorizer = None
+individual_models = {}
+feature_info = None
 
-def build_and_train_models():
-    """
-    Builds and trains multiple ML algorithms with enhanced features for maximum accuracy.
-    Returns a dictionary of trained models.
-    """
-    messages, labels = load_and_prepare_data()
+# --- Text Preprocessing Function ---
+def preprocess_text(text):
+    text = str(text).lower()
+    text = re.sub(r'[^a-zA-Z0-9\s]', '', text)
+    tokens = word_tokenize(text)
+    stemmed_tokens = [ps.stem(word) for word in tokens if word not in stop_words and len(word) > 2]
+    return " ".join(stemmed_tokens)
+
+# --- Feature Engineering Functions (Enhanced) ---
+def contains_url(text):
+    return 1 if re.search(r'http[s]?://|www\.', text, re.IGNORECASE) else 0
+
+def contains_short_url(text):
+    return 1 if re.search(r'bit\.ly|t\.co|tinyurl|goo\.gl', text, re.IGNORECASE) else 0
+
+def contains_phishing_words(text):
+    words = ['lock', 'verifi', 'suspend', 'unusu', 'activ', 'password', 'secur', 'ident', 
+             'click', 'urgent', 'immedi', 'expir', 'warn', 'risk', 'compr']
+    text_processed = preprocess_text(text)
+    return 1 if any(word in text_processed for word in words) else 0
+
+def contains_urgency_words(text):
+    words = ['immedi', 'urgent', 'now', 'avoid', 'act', 'quick', 'asap', 'today']
+    text_processed = preprocess_text(text)
+    return 1 if any(word in text_processed for word in words) else 0
+
+def message_length(text):
+    return len(text)
+
+def digit_count(text):
+    return sum(c.isdigit() for c in text)
+
+def uppercase_ratio(text):
+    if len(text) == 0:
+        return 0
+    return sum(c.isupper() for c in text) / len(text)
+
+def exclamation_count(text):
+    return text.count('!')
+
+def question_count(text):
+    return text.count('?')
+
+def word_count(text):
+    return len(text.split())
+
+def avg_word_length(text):
+    words = text.split()
+    if len(words) == 0:
+        return 0
+    return np.mean([len(word) for word in words])
+
+def contains_money(text):
+    return 1 if re.search(r'\$|\d+ dollars|\d+ pounds|prize|million|thousand', text, re.IGNORECASE) else 0
+
+def contains_winner(text):
+    return 1 if re.search(r'winner|won|prize|congrats|congratulations', text, re.IGNORECASE) else 0
+
+# --- Feature Extraction ---
+def extract_features(text):
+    """Extract all engineered features"""
+    return np.array([
+        contains_url(text),
+        contains_short_url(text),
+        contains_phishing_words(text),
+        contains_urgency_words(text),
+        message_length(text),
+        digit_count(text),
+        uppercase_ratio(text),
+        exclamation_count(text),
+        question_count(text),
+        word_count(text),
+        avg_word_length(text),
+        contains_money(text),
+        contains_winner(text)
+    ]).reshape(1, -1)
+
+# --- Load or Train Model ---
+def load_or_train_model():
+    global ensemble_model, vectorizer, individual_models, feature_info
     
-    # Enhanced feature extraction with multiple vectorizers
-    tfidf_vectorizer = TfidfVectorizer(
-        lowercase=True, 
-        stop_words="english", 
-        max_features=10000, 
-        ngram_range=(1,3),
-        min_df=1,
-        max_df=0.95
-    )
+    # Try to load ensemble model first
+    ensemble_path = 'spam_model_ensemble.pkl'
+    vectorizer_path = 'vectorizer.pkl'
+    feature_info_path = 'feature_info.pkl'
     
-    count_vectorizer = CountVectorizer(
-        lowercase=True,
-        stop_words="english",
-        max_features=5000,
-        ngram_range=(1,2),
-        min_df=1,
-        max_df=0.95
-    )
-    
-    # Define enhanced algorithms with better parameters
-    algorithms = {
-        'logistic_regression': Pipeline([
-            ("tfidf", tfidf_vectorizer),
-            ("classifier", LogisticRegression(random_state=42, solver='liblinear', C=1.0, max_iter=1000))
-        ]),
-        'naive_bayes': Pipeline([
-            ("tfidf", tfidf_vectorizer),
-            ("classifier", MultinomialNB(alpha=0.1))
-        ]),
-        'random_forest': Pipeline([
-            ("tfidf", tfidf_vectorizer),
-            ("classifier", RandomForestClassifier(random_state=42, n_estimators=200, max_depth=20, min_samples_split=2))
-        ]),
-        'svm': Pipeline([
-            ("tfidf", tfidf_vectorizer),
-            ("classifier", SVC(random_state=42, probability=True, C=1.0, kernel='rbf'))
-        ]),
-        'ensemble': Pipeline([
-            ("tfidf", tfidf_vectorizer),
-            ("classifier", VotingClassifier([
-                ('lr', LogisticRegression(random_state=42, solver='liblinear')),
-                ('nb', MultinomialNB(alpha=0.1)),
-                ('rf', RandomForestClassifier(random_state=42, n_estimators=100)),
-                ('svm', SVC(random_state=42, probability=True, C=1.0))
-            ], voting='soft'))
-        ])
-    }
-    
-    # Train all models and calculate accuracy
-    trained_models = {}
-    for name, pipeline in algorithms.items():
-        print(f"Training {name.replace('_', ' ').title()}...")
-        pipeline.fit(messages, labels)
-        
-        # Calculate cross-validation score for accuracy assessment
+    if os.path.exists(ensemble_path) and os.path.exists(vectorizer_path):
+        print("--- Loading saved ensemble model... ---")
         try:
-            cv_scores = cross_val_score(pipeline, messages, labels, cv=5, scoring='accuracy')
-            accuracy = cv_scores.mean()
-            print(f"{name.replace('_', ' ').title()} training complete. CV Accuracy: {accuracy:.3f}")
-        except:
-            print(f"{name.replace('_', ' ').title()} training complete.")
-        
-        trained_models[name] = pipeline
-    
-    return trained_models
-
-# Initialize the Flask web application and train all models on startup
-app = Flask(__name__, static_folder=None)
-models = build_and_train_models()
-
-@app.route("/")
-def index():
-    """Serves the main HTML user interface."""
-    directory = os.path.dirname(os.path.abspath(__file__))
-    return send_from_directory(directory, "spam.html")
-
-@app.route("/predict", methods=["POST"])
-def predict():
-    """Receives a user's message and returns the exact prediction percentages from logistic regression."""
-    try:
-        data = request.get_json(silent=True) or {}
-        message = (data.get("message") or "").strip()
-        if not message:
-            return jsonify({"ok": False, "error": "Message is required"}), 400
-
-        # Use the logistic regression model to predict probabilities for [ham, spam]
-        probabilities = models['logistic_regression'].predict_proba([message])[0]
-        ham_probability = float(probabilities[0])
-        spam_probability = float(probabilities[1])
-
-        # Determine the final label based on the higher probability
-        label = "spam" if spam_probability > ham_probability else "ham"
-
-        # Return a JSON response with the exact percentages
-        return jsonify({
-            "ok": True,
-            "label": label,
-            "spam_score": spam_probability,
-            "ham_score": ham_probability,
-        })
-    except Exception as exc:
-        return jsonify({
-            "ok": False,
-            "error": f"An unexpected error occurred: {str(exc)}",
-        }), 500
-
-@app.route("/predict-all", methods=["POST"])
-def predict_all():
-    """Receives a user's message and returns predictions from all algorithms with percentages."""
-    try:
-        data = request.get_json(silent=True) or {}
-        message = (data.get("message") or "").strip()
-        if not message:
-            return jsonify({"ok": False, "error": "Message is required"}), 400
-
-        # Preprocess the input message
-        processed_message = advanced_text_preprocessing(message)
-        
-        # Get predictions from all models
-        results = {}
-        for name, model in models.items():
-            probabilities = model.predict_proba([processed_message])[0]
-            ham_probability = float(probabilities[0])
-            spam_probability = float(probabilities[1])
-            label = "spam" if spam_probability > ham_probability else "ham"
+            ensemble_model = joblib.load(ensemble_path)
+            vectorizer = joblib.load(vectorizer_path)
+            if os.path.exists(feature_info_path):
+                feature_info = joblib.load(feature_info_path)
             
-            results[name] = {
-                "label": label,
-                "spam_score": spam_probability,
-                "ham_score": ham_probability
+            # Also load individual models if available
+            model_files = {
+                'random_forest': 'model_rf.pkl',
+                'naive_bayes': 'model_nb.pkl',
+                'logistic_regression': 'model_lr.pkl',
+                'gradient_boosting': 'model_gb.pkl'
             }
+            
+            for name, path in model_files.items():
+                if os.path.exists(path):
+                    individual_models[name] = joblib.load(path)
+            
+            print("--- Ensemble model loaded successfully. ---")
+        except Exception as e:
+            print(f"Error loading ensemble model: {e}")
+            print("Please run train_ensemble_model.py first to create the models.")
+            ensemble_model = None
+    else:
+        print("--- Ensemble model not found. ---")
+        print("Please run train_ensemble_model.py first to create the models.")
+        ensemble_model = None
 
-        # Calculate average scores across all models
-        avg_spam_score = np.mean([result["spam_score"] for result in results.values()])
-        avg_ham_score = np.mean([result["ham_score"] for result in results.values()])
-        consensus_label = "spam" if avg_spam_score > avg_ham_score else "ham"
+# --- Prediction Functions ---
+def make_prediction(message_text):
+    """Make prediction using ensemble model"""
+    if ensemble_model is None or vectorizer is None:
+        raise Exception("Model not loaded. Please run train_ensemble_model.py first.")
+    
+    processed_message = preprocess_text(message_text)
+    message_tfidf = vectorizer.transform([processed_message])
+    
+    # Extract engineered features
+    features = extract_features(message_text)
+    
+    # Combine features
+    combined_features = hstack([message_tfidf, features])
+    
+    # Predict
+    prediction = ensemble_model.predict(combined_features)[0]
+    spam_probability = ensemble_model.predict_proba(combined_features)[0][1]
+    
+    return prediction, spam_probability
 
+def make_predictions_all_models(message_text):
+    """Make predictions using all available individual models"""
+    if vectorizer is None:
+        raise Exception("Vectorizer not loaded.")
+    
+    processed_message = preprocess_text(message_text)
+    message_tfidf = vectorizer.transform([processed_message])
+    features = extract_features(message_text)
+    combined_features = hstack([message_tfidf, features])
+    
+    results = {}
+    
+    # Ensemble prediction
+    if ensemble_model is not None:
+        try:
+            proba = ensemble_model.predict_proba(combined_features)[0]
+            results['ensemble'] = {
+                'label': 'spam' if proba[1] > 0.5 else 'ham',
+                'ham_score': float(proba[0]),
+                'spam_score': float(proba[1])
+            }
+        except:
+            pass
+    
+    # Individual model predictions
+    for name, model in individual_models.items():
+        try:
+            proba = model.predict_proba(combined_features)[0]
+            results[name] = {
+                'label': 'spam' if proba[1] > 0.5 else 'ham',
+                'ham_score': float(proba[0]),
+                'spam_score': float(proba[1])
+            }
+        except Exception as e:
+            print(f"Error with {name}: {e}")
+    
+    # Calculate consensus
+    if results:
+        avg_spam = np.mean([r['spam_score'] for r in results.values()])
+        avg_ham = 1 - avg_spam
+        consensus = {
+            'label': 'spam' if avg_spam > 0.5 else 'ham',
+            'ham_score': avg_ham,
+            'spam_score': avg_spam
+        }
+    else:
+        consensus = None
+    
+    return results, consensus
+
+# --- Flask App Initialization ---
+app = Flask(__name__)
+
+# --- Flask Routes ---
+@app.route('/')
+def home():
+    return render_template('spam.html', result=None)
+
+@app.route('/hello', methods=['GET'])
+def hello_route():
+    return jsonify({'message': 'Hello, the enhanced spam detection server is working!'})
+
+@app.route('/predict', methods=['POST'])
+def predict_web():
+    try:
+        new_message = request.form['message']
+        prediction, spam_probability = make_prediction(new_message)
+        spam_percentage = int(spam_probability * 100)
+        if prediction == 1:
+            result_text = f"This message is {spam_percentage}% likely to be SPAM."
+        else:
+            result_text = f"This message is {100 - spam_percentage}% likely to be HAM (Not Spam)."
+        return render_template('spam.html', result=result_text, message=new_message)
+    except Exception as e:
+        return render_template('spam.html', result=f"An error occurred: {e}", message=None)
+
+@app.route('/api/predict', methods=['POST'])
+def predict_api():
+    try:
+        data = request.get_json()
+        if not data or 'message' not in data:
+            return jsonify({'error': 'Missing "message" in JSON body'}), 400
+        
+        new_message = data['message']
+        prediction, spam_probability = make_prediction(new_message)
+        
         return jsonify({
-            "ok": True,
-            "consensus": {
-                "label": consensus_label,
-                "spam_score": float(avg_spam_score),
-                "ham_score": float(avg_ham_score)
-            },
-            "algorithms": results
+            'prediction': 'spam' if prediction == 1 else 'ham',
+            'spam_probability': float(spam_probability)
         })
-    except Exception as exc:
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/predict-all', methods=['POST'])
+def predict_all():
+    """Endpoint for multi-algorithm comparison"""
+    try:
+        data = request.get_json()
+        if not data or 'message' not in data:
+            return jsonify({'ok': False, 'error': 'Missing "message" in JSON body'}), 400
+        
+        message = data['message']
+        algorithms, consensus = make_predictions_all_models(message)
+        
         return jsonify({
-            "ok": False,
-            "error": f"An unexpected error occurred: {str(exc)}",
-        }), 500
+            'ok': True,
+            'algorithms': algorithms,
+            'consensus': consensus
+        })
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
 
-if __name__ == "__main__":
-    print("Starting Flask server at http://127.0.0.1:5000")
-    app.run(host="127.0.0.1", port=5000)
-
+# --- Main execution ---
+if __name__ == '__main__':
+    load_or_train_model()
+    if ensemble_model is None:
+        print("\nWARNING: Model not loaded. The app will not work properly.")
+        print("Please run: python train_ensemble_model.py")
+    app.run(debug=True, host='0.0.0.0', port=5000)

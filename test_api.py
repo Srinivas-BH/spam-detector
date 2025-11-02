@@ -1,64 +1,66 @@
-#!/usr/bin/env python3
-"""
-Simple test script to verify the spam detector API functionality.
-"""
-
 import requests
 import json
-import time
+import sys
 
 def test_api():
     base_url = "http://127.0.0.1:5000"
+    hello_url = f"{base_url}/hello"
+    predict_url = f"{base_url}/api/predict"
     
-    # Test messages
-    test_messages = [
-        "Hey, are we still on for lunch today?",  # Should be ham
-        "URGENT! You have won a FREE prize, click now",  # Should be spam
-        "Can you send me the report by tomorrow?",  # Should be ham
-        "Congratulations! You've been selected for a special offer!"  # Should be spam
-    ]
+    print("--- Starting Full API Test ---")
     
-    print("Testing Spam Detector API...")
-    print("=" * 50)
+    # --- Step 1: Check the /hello debug route ---
+    print(f"\n[Test 1] Checking server status at: {hello_url}")
+    try:
+        response = requests.get(hello_url, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        
+        if data.get('message') == 'Hello, the new server is working!':
+            print("  ✓ SUCCESS: Server is running the new app.py code.")
+        else:
+            print("  ✗ FAILED: Server responded, but with unexpected data.")
+            sys.exit()
+            
+    except requests.exceptions.JSONDecodeError:
+        print("  ✗ FAILED: Server is returning HTML, not JSON.")
+        print("  This means the '/hello' route is missing. The server is running OLD code.")
+        print(f"  Response Snippet: {response.text[:100]}...")
+        sys.exit()
+    except requests.exceptions.HTTPError:
+        print("  ✗ FAILED: Server returned a 404 or 500 error.")
+        print("  This means the '/hello' route is missing. The server is running OLD code.")
+        sys.exit()
+    except requests.exceptions.ConnectionError:
+        print("  ✗ FAILED: Could not connect to the server.")
+        print("  Please make sure 'python app.py' is running in another terminal.")
+        sys.exit()
+    except Exception as e:
+        print(f"  An unexpected error occurred: {e}")
+        sys.exit()
+
+    # --- Step 2: Test the /api/predict route ---
+    print(f"\n[Test 2] Testing spam prediction at: {predict_url}")
+    test_message = "Your account has been temporarily locked due to unusual activity. Please verify your identity immediately: http://bit.ly/secure-auth-123"
     
-    for i, message in enumerate(test_messages, 1):
-        print(f"\nTest {i}: {message[:50]}...")
+    try:
+        payload = {'message': test_message}
+        response = requests.post(predict_url, json=payload, timeout=10)
+        response.raise_for_status() 
+        data = response.json() 
         
-        # Test single algorithm (logistic regression)
-        try:
-            response = requests.post(f"{base_url}/predict", 
-                                   json={"message": message}, 
-                                   timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                print(f"  Single Algorithm: {data['label'].upper()} "
-                      f"(Ham: {data['ham_score']:.1%}, Spam: {data['spam_score']:.1%})")
-            else:
-                print(f"  Single Algorithm: Error {response.status_code}")
-        except Exception as e:
-            print(f"  Single Algorithm: Error - {e}")
+        print("  ✓ SUCCESS: API Test Successful.")
+        print(f"  Prediction: {data['prediction'].upper()} "
+              f"(Spam Probability: {data['spam_probability']:.1%})")
+              
+    except requests.exceptions.JSONDecodeError:
+        print("  ✗ FAILED: JSONDecodeError. This is a critical error.")
+        print("  The server is returning HTML for '/api/predict'.")
+        print("  This means there is an internal error in the 'predict_api' function.")
+        print(f"  Response Snippet: {response.text[:100]}...")
         
-        # Test all algorithms
-        try:
-            response = requests.post(f"{base_url}/predict-all", 
-                                   json={"message": message}, 
-                                   timeout=15)
-            if response.status_code == 200:
-                data = response.json()
-                consensus = data['consensus']
-                print(f"  All Algorithms: {consensus['label'].upper()} "
-                      f"(Ham: {consensus['ham_score']:.1%}, Spam: {consensus['spam_score']:.1%})")
-                
-                # Show individual algorithm results
-                for alg_name, result in data['algorithms'].items():
-                    print(f"    {alg_name.replace('_', ' ').title()}: {result['label'].upper()} "
-                          f"(Ham: {result['ham_score']:.1%}, Spam: {result['spam_score']:.1%})")
-            else:
-                print(f"  All Algorithms: Error {response.status_code}")
-        except Exception as e:
-            print(f"  All Algorithms: Error - {e}")
-        
-        time.sleep(1)  # Small delay between requests
+    except Exception as e:
+        print(f"  An unexpected error occurred: {e}")
 
 if __name__ == "__main__":
     test_api()

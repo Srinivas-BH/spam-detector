@@ -1,0 +1,81 @@
+============================================================
+SPAM DETECTION SYSTEM - RUN INSTRUCTIONS
+============================================================
+
+STATUS: Everything is ready! Your Flask app should be starting now.
+
+============================================================
+HOW TO ACCESS THE SYSTEM
+============================================================
+
+1. WEB INTERFACE (Recommended):
+   - Open your web browser
+   - Go to: http://localhost:5000
+   - Paste a message in the text box
+   - Click "Analyze" to see spam/ham prediction
+   - View the scatter plot showing all algorithm results
+
+2. API TESTING:
+   Open a NEW terminal window and run:
+   
+   python test_api.py
+   
+   This will test the /api/predict endpoint
+
+3. ENHANCED API TESTING:
+   python test_enhanced_api.py
+   
+   This will test multiple test cases
+
+============================================================
+STOPPING THE SERVER
+============================================================
+
+To stop the Flask server:
+- Press Ctrl+C in the terminal where it's running
+- Or close the terminal window
+
+============================================================
+RESTARTING THE SERVER
+============================================================
+
+If you need to restart, run:
+   cd D:\mini-project\spam-detector
+   python app.py
+
+============================================================
+TROUBLESHOOTING
+============================================================
+
+If you see "Model not loaded" error:
+1. Make sure you're in the spam-detector directory
+2. Check that these files exist:
+   - spam_model_ensemble.pkl
+   - vectorizer.pkl
+   - feature_info.pkl
+
+If models are missing, run:
+   python train_ensemble_model.py
+
+If the server doesn't start:
+- Check if port 5000 is already in use
+- Try a different port by editing app.py (change port=5000)
+
+============================================================
+TEST EXAMPLES
+============================================================
+
+Try these messages in the web interface:
+
+SPAM Examples:
+- "URGENT! You have won $1000! Click here now!"
+- "Your account has been locked. Verify immediately: http://bit.ly/fake-link"
+- "Congratulations! Claim your prize now!"
+
+HAM Examples:
+- "Hey, are we still on for lunch today?"
+- "Can you send me the report by tomorrow?"
+- "Thanks for the update, I'll review it later."
+
+============================================================
+
