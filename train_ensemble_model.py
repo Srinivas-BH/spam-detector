@@ -54,7 +54,8 @@ def contains_phishing_words(text):
     return 1 if any(word in text_processed for word in words) else 0
 
 def contains_urgency_words(text):
-    words = ['immedi', 'urgent', 'now', 'avoid', 'act', 'quick', 'asap', 'today']
+    # Removed 'today' to avoid false positives on benign coordination messages
+    words = ['immedi', 'urgent', 'now', 'avoid', 'act', 'quick', 'asap']
     text_processed = preprocess_text(text)
     return 1 if any(word in text_processed for word in words) else 0
 

@@ -5,6 +5,10 @@ import sys
 # Make sure your file name matches this EXACTLY.
 NEW_FILENAME = 'new_spam_data.csv'
 
+# Output files (we save both for compatibility)
+OUTPUT_SPAM_DATA = 'spam_data.csv'
+OUTPUT_MASTER = 'master_spam_dataset.csv'
+
 print("Starting dataset merge...")
 print("="*30)
 
@@ -93,10 +97,12 @@ df_combined = pd.concat([df_combined, pd.DataFrame([phishing_example])], ignore_
 print("-> Added your custom phishing example.")
 
 # --- 4. Save the FINAL master dataset ---
-# This is the *only* file your app.py will use from now on.
-df_combined.to_csv('spam_data.csv', index=False, encoding='utf-8')
+# Save in both formats: spam_data.csv (legacy) and master_spam_dataset.csv (used by training)
+df_combined.to_csv(OUTPUT_SPAM_DATA, index=False, encoding='utf-8')
+df_combined.to_csv(OUTPUT_MASTER, index=False, encoding='utf-8')
 
 print("\n" + "="*30)
-print(f"SUCCESS! 🚀")
-print(f"Saved {len(df_combined)} total unique messages to spam_data.csv.")
-print("You can now safely run your app.py!")
+print("SUCCESS!")
+print(f"Saved {len(df_combined)} total unique messages to {OUTPUT_SPAM_DATA} and {OUTPUT_MASTER}.")
+print("You can now train the models with:\n  python train_ensemble_model.py")
+print("Then run the app with:\n  python app.py")

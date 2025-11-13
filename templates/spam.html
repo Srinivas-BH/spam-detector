@@ -164,23 +164,30 @@
         scatterChart.data.datasets[1].data.push({x: hamPct, y: spamPct, name: 'consensus'});
       }
 
-      // Add each algorithm point
+      // Add each algorithm point in a fixed order with clean display names
       const algoResults = data.algorithms || {};
-      Object.keys(algoResults).forEach((algName, idx) => {
-        const r = algoResults[algName];
+      const order = [
+        {key:'logistic_regression', name:'Logistic Regression'},
+        {key:'naive_bayes', name:'Multinomial Naive Bayes'},
+        {key:'random_forest', name:'Random Forest'},
+        {key:'svm', name:'SVM (RBF Kernel)'},
+        {key:'ensemble', name:'Ensemble'}
+      ];
+
+      order.forEach(({key, name}) => {
+        const r = algoResults[key];
+        if (!r) { return; }
         const hamPct = r.ham_score * 100;
         const spamPct = r.spam_score * 100;
 
-        // small card per algorithm
         const div = document.createElement('div');
         div.className = 'alg-item';
-        div.innerHTML = `<strong style="text-transform:capitalize">${algName.replace(/_/g,' ')}</strong>
+        div.innerHTML = `<strong>${name}</strong>
                          <div class="small">Label: <b>${r.label}</b></div>
                          <div class="small">Ham: ${(hamPct).toFixed(2)}% &nbsp; | &nbsp; Spam: ${(spamPct).toFixed(2)}%</div>`;
         algListEl.appendChild(div);
 
-        // scatter point
-        scatterChart.data.datasets[0].data.push({x: hamPct, y: spamPct, name: algName});
+        scatterChart.data.datasets[0].data.push({x: hamPct, y: spamPct, name});
       });
 
       scatterChart.update();
